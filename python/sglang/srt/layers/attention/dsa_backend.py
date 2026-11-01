@@ -706,8 +706,6 @@ class DeepseekSparseAttnBackend(
         else:
             self.device_capability = torch.cuda.get_device_capability()
         self.device_sm_major = self.device_capability[0]
-        # Query width and TP-local head count are fixed for this backend.
-        # Cache the FlashMLA sparse kernel layout instead of checking them per call.
         self.flashmla_sparse_head_padding = self._flashmla_sparse_head_padding(
             device_sm_major=self.device_sm_major,
             head_dim=self.kv_lora_rank + self.qk_rope_head_dim,
@@ -2896,11 +2894,7 @@ class DeepseekSparseAttnBackend(
     def _flashmla_sparse_head_padding(
         device_sm_major: int, head_dim: int, num_heads: int
     ) -> int:
-        # Blackwell has a head64 sparse-prefill kernel for 576-wide queries.
         # TODO: Validate head64 at d_qk=512 before widening this guard.
-        # Both widths are available (FlashMLA #150; SGLang #18902), but the
-        # measurements cover ML4's 576-wide layout, including zero-padded
-        # NoPE layers.
         if device_sm_major == 10 and head_dim == 576 and num_heads <= 64:
             return 64
         return 128 if device_sm_major >= 10 else 64
